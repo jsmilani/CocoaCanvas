@@ -1,0 +1,21 @@
+div.card {
+  padding: 2px;
+  height: 40px;
+  width: 24px;
+  background-color: #FFF;
+  border: 1px solid #666;
+  position: fixed;
+}
+
+#frameRate {
+  color: #FFFFFF;
+  background-color: rgba(150,150,150,0.8);
+  -webkit-transition: all 0.3s ease;
+  text-shadow: 1px 1px rgba(0,0,0,0.8);
+  border-radius: 10px;
+  padding: 4px;
+}
+
+#frameRate:hover {
+  background-color: rgba(100,100,100,0.8);
+}

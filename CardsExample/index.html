@@ -1,0 +1,28 @@
+<!DOCTYPE HTML>
+<html>
+  <head>
+    <title>Cards</title>
+    <link rel="stylesheet" media="screen" href="main.css" type="text/css" />    
+    <script src="jquery-1.5.js"></script>
+    <script src="cocoa-canvas.js"></script>
+    <script src="cards.js"></script>
+    <script>
+    
+    var app;
+    function onBodyLoad()
+    {
+      app = new CardGame('cards');
+      $('#frameRate').html(app.frameRate + ' fps');
+      setInterval(function() {
+        $('#frameRate').html(app.frameRate + ' fps');
+      },1000);
+    }
+    </script>
+  </head>
+  <body onload="onBodyLoad()">
+    
+    <div><span id="frameRate">0 fps</span><br /><br /></div>
+    <canvas id="cards" width="640" height="480">This browser does not support HTML5 Canvas.</canvas>
+    
+  </body>
+</html>
