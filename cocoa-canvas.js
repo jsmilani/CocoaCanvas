@@ -1,26 +1,47 @@
-function subclass(p) {
-  function f(){}
-  f.prototype = p;
-  return new f();
+function CCSubclass(sub, sup) {
+  function inheritance() {}
+  inheritance.prototype = sup.prototype;
+  
+  sub.prototype = new inheritance();
+  sub.prototype.constructor = sub;
+  sub.baseConstructor = sup;
+  sub.superClass = sup.prototype;
+}
+function CCObject() {
+}
+CCObject.prototype.isKindOfClass = function(klass) {
+  return (klass == this.getClass());
+}
+CCObject.prototype.isMemberOfClass = function(klass) {
+  return klass.prototype.isPrototypeOf(this);
+}
+CCObject.prototype.getClass = function() {
+  return this.constructor;
+}
+CCObject.prototype.description = function() {
+  return '<'+this.className()+'>'
 }
 
 function CCPoint(x,y) {
   this.x = x;
   this.y = y;
 }
-CCPoint.prototype.toString = function() {'x:'+this.x+',y:'+this.y}
 function CCSize(w,h) {
   this.w = w;
   this.h = h;
 }
-CCSize.prototype.toString = function() {'w:'+this.w+',h:'+this.h}
 function CCRect(origin,size) {
   this.origin = origin
   this.size = size
 }
-CCRect.prototype.toString = function() {this.origin.toString()+','+this.size.toString()}
-function CMakeRect(x,y,w,h) {
+CCRect.prototype.components = function() {
+  return [this.origin.x, this.origin.y, this.size.w, this.size.h];
+}
+function CCRectMake(x,y,w,h) {
   return new CCRect(new CCPoint(x,y), new CCSize(w,h));
+}
+function CCRectInset(rect, dx, dy) {
+  return CCRectMake(rect.origin.x + dx, rect.origin.y + dy, rect.size.w - (2 * dx), rect.size.h - (2 * dy));
 }
 function CCRectIntersectsRect(rectA,rectB) {
   return (rectA.origin.x < rectB.origin.x + rectB.size.w && rectB.origin.x < rectA.origin.x + rectA.size.w && rectA.origin.y < rectB.origin.y + rectB.size.h && rectB.origin.y < rectA.origin.y + rectA.size.h)
@@ -30,28 +51,23 @@ function CCRectUnion(rectA,rectB) {
   var topRect = rectA.origin.y < rectB.origin.y ? rectA : rectB;
   var rightRect = rectA.origin.x + rectA.size.w > rectB.origin.x + rectB.size.w ? rectA : rectB;
   var bottomRect = rectA.origin.y + rectA.size.h > rectB.origin.y + rectB.size.h ? rectA : rectB;
-  return CMakeRect(leftRect.origin.x, topRect.origin.y, rightRect.origin.x + rightRect.size.w - leftRect.origin.x, bottomRect.origin.y + bottomRect.size.h - topRect.origin.y);
+  return CCRectMake(leftRect.origin.x, topRect.origin.y, rightRect.origin.x + rightRect.size.w - leftRect.origin.x, bottomRect.origin.y + bottomRect.size.h - topRect.origin.y);
 }
 function CCRectIntersection(rectA,rectB){
   var notLeftRect = rectA.origin.x < rectB.origin.x ? rectB : rectA;
   var notTopRect = rectA.origin.y < rectB.origin.y ? rectB : rectA;
   var notRightRect = rectA.origin.x + rectA.size.w > rectB.origin.x + rectB.size.w ? rectB : rectA;
   var notBottomRect = rectA.origin.y + rectA.size.h > rectB.origin.y + rectB.size.h ? rectB : rectA;
-  return CMakeRect(notLeftRect.origin.x, notTopRect.origin.y, notRightRect.origin.x + notRightRect.size.w - notLeftRect.origin.x, notBottomRect.origin.y + notBottomRect.size.h - notTopRect.origin.y);
+  return CCRectMake(notLeftRect.origin.x, notTopRect.origin.y, notRightRect.origin.x + notRightRect.size.w - notLeftRect.origin.x, notBottomRect.origin.y + notBottomRect.size.h - notTopRect.origin.y);
 }
-CCApplication.cache = {imageNames:[], images:{}, loadImage:function(imageName, imagePath) {this.images[imageName] = imagePath; this.imageNames.push(imageName)}}
 
 function CCApplication(canvasName) {
+  CCObject.call(this);
   this.canvas = document.getElementById(canvasName);
   this.ctx = this.canvas.getContext('2d');
   
-  this.window = new CCWindow(CMakeRect(0,0,this.canvas.width,this.canvas.height));
+  this.window = new CCWindow(CCRectMake(0,0,this.canvas.width,this.canvas.height));
   this.window.superview = this;
-  
-  this.desiredFrameRate = 30;
-  this.frameRate = 30;
-  this.frameCount = 0;
-  this.lastFrameSample = 0;
   
   this.dragging = false;
   this.dragData = null;
@@ -64,7 +80,7 @@ function CCApplication(canvasName) {
   
   // begin loading images
   
-  this.animationTimer = setInterval(function(){
+  var animationTimer = setInterval(function(){
     var ctx = self.ctx;
     var width = 200;
     var height = 18;
@@ -84,11 +100,11 @@ function CCApplication(canvasName) {
     ctx.restore();
   },200);
   
-  var count = CCApplication.cache.imageNames.length;
+  var count = CCCache.imageNames.length;
   var images = [];
-  for(var i in CCApplication.cache.imageNames) {
+  for(var i in CCCache.imageNames) {
     var image = new Image();
-    image.src = CCApplication.cache.images[CCApplication.cache.imageNames[i]];
+    image.src = CCCache.images[CCCache.imageNames[i]];
     images << image;
   }
   
@@ -106,35 +122,22 @@ function CCApplication(canvasName) {
   
   this.loadingPercentComplete = 100;
   
-  clearInterval(this.animationTimer);
+  clearInterval(animationTimer);
   
-  // Done loading. Begin animating...
-  
-  this.animationTimer = setInterval(function(){self.drawWindow()},1000 / this.desiredFrameRate);
-  setInterval(function(){self.calculateFrameRate()},1000);
+  // Done loading. Start event listeners.
   
   this.canvas.addEventListener("click", function(e){self.doClick(e);}, true);
   this.canvas.addEventListener("mousedown", function(e){self.doMouseDown(e);}, true);
   this.canvas.addEventListener("mouseup", function(e){self.doMouseUp(e);}, true);
   this.canvas.addEventListener("mousemove", function(e){self.doMouseMove(e);}, true);
 }
+CCSubclass(CCApplication, CCObject);
 CCApplication.prototype.drawWindow = function() {
   if(this.invalidRect) {
     this.ctx.clearRect(this.invalidRect.origin.x, this.invalidRect.origin.y, this.invalidRect.size.w, this.invalidRect.size.h);
     this.window._drawRect(this.invalidRect);
     this.invalidRect = null;
   }
-  this.frameCount += 1;
-}
-CCApplication.prototype.calculateFrameRate = function() {
-  this.frameRate = this.frameCount - this.lastFrameSample;
-  this.lastFrameSample = this.frameCount;
-}
-CCApplication.prototype.setFrameRate = function(newRate) {
-  var self = this;
-  this.desiredFrameRate = newRate;
-  stopInterval(this.animationTimer);
-  this.animationTimer = setInterval(function(){self.drawWindow()}, 1000 / this.desiredFrameRate);
 }
 CCApplication.prototype.context = function() {
   return this.ctx;
@@ -195,13 +198,17 @@ CCApplication.prototype._invalidateRect = function(rect) {
   } else {
     this.invalidRect = rect;
   }
+  this.drawWindow();
 }
 
 function CCView(frame) {
+  CCObject.call(this);
   this.frame = frame;
+  this.bounds = new CCRect(new CCPoint(0, 0), this.frame.size);
   this.subviews = [];
   this.superview = null;
 }
+CCSubclass(CCView, CCObject);
 CCView.prototype.context = function() {
   if(this.superview) {
     return this.superview.context();
@@ -212,7 +219,6 @@ CCView.prototype.context = function() {
 CCView.prototype._drawRect = function(rect) {
   var ctx = this.context();
   var localRect = this.convertRectFromSuper(rect);
-  
   ctx.save();
   ctx.translate(this.frame.origin.x, this.frame.origin.y);
   
@@ -224,11 +230,14 @@ CCView.prototype._drawRect = function(rect) {
   
   for (i in this.subviews) {
     if(this.subviews[i].containsRect(localRect)) {
-      this.subviews[i]._drawRect(CCRectUnion(this.subviews[i].frame, localRect));
+      this.subviews[i]._drawRect(CCRectIntersection(this.subviews[i].frame, localRect));
     }
   }
   
   ctx.restore();
+}
+CCView.prototype.bounds = function() {
+  return CCRectMake(0, 0, this.frame.size.w, this.frame.size.h)
 }
 CCView.prototype.drawRect = function(rect) {
   // overload this to do drawing
@@ -309,7 +318,7 @@ CCView.prototype.containsRect = function(rect) {
   return CCRectIntersectsRect(this.frame, rect);
 }
 CCView.prototype.convertRectFromSuper = function(rect) {
-  return CMakeRect(rect.origin.x - this.frame.origin.x, rect.origin.y - this.frame.origin.y, rect.size.w, rect.size.h);
+  return CCRectMake(rect.origin.x - this.frame.origin.x, rect.origin.y - this.frame.origin.y, rect.size.w, rect.size.h);
 }
 CCView.prototype.addSubview = function(view) {
   this.subviews.push(view);
@@ -325,13 +334,22 @@ CCView.prototype.removeFromSuperview = function() {
 CCView.prototype._invalidateRect = function(rect) {
   // this could get called before added to a superview
   if(this.superview) {
-    this.superview._invalidateRect(CMakeRect(rect.origin.x + this.frame.origin.x, rect.origin.y + this.frame.origin.y, rect.size.w, rect.size.h));
+    this.superview._invalidateRect(CCRectMake(rect.origin.x + this.frame.origin.x, rect.origin.y + this.frame.origin.y, rect.size.w, rect.size.h));
   }
 }
 CCView.prototype.setFrame = function(frame) {
-  this.superview._invalidateRect(this.frame);
-  this.frame = frame;
-  this.superview._invalidateRect(this.frame);
+  if(CCRectIntersectsRect(this.frame,frame)) {
+    var rect = CCRectUnion(this.frame, frame);
+    this.frame = frame;
+    this.bounds.size = this.frame.size;
+    this.superview._invalidateRect(rect);
+  } else {
+    var rect = this.frame;
+    this.frame = frame;
+    this.bounds.size = this.frame.size;
+    this.superview._invalidateRect(rect);
+    this.superview._invalidateRect(this.frame);
+  }
 }
 CCView.prototype.setNeedsDisplay = function() {
   this.cachedContent = null;
@@ -339,7 +357,7 @@ CCView.prototype.setNeedsDisplay = function() {
 }
 
 function CCImage(imageName) {
-  var imagePath = CCApplication.cache.images[imageName];
+  var imagePath = CCCache.images[imageName];
   var image = new Image();
   image.src = imagePath;
   return image;
@@ -348,4 +366,12 @@ function CCImage(imageName) {
 function CCWindow(frame) {
   CCView.call(this, frame);
 }
-CCWindow.prototype = subclass(CCView.prototype);
+CCSubclass(CCWindow, CCView);
+
+function CCViewController(frame) {
+  CCObject.call(this, frame);
+}
+CCSubclass(CCViewController, CCObject);
+
+
+CCCache = {imageNames:[], images:{}, loadImage:function(imageName, imagePath) {this.images[imageName] = imagePath; this.imageNames.push(imageName)}}

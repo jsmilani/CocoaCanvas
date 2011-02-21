@@ -4,7 +4,7 @@ Cocoa Canvas is designed to be the MVC foundation for HTML5 Canvas applications.
 
 Development Note
 -----------------
-The API is splint into modules. Only the 'Core' module is available at this time. The other modules sets will be mentioned, but no documentation is available.
+The API is split into modules. Only the 'Core' module is available at this time. The other modules sets will be mentioned, but no documentation is available.
 
 Core (cocoa-canvas.js)
 -----------------------
@@ -14,8 +14,8 @@ UI (under development)
 -----------------------
 The UI module extends the API with Control and Text fields.
 
-Proposed Feature Sets
+Proposed Modules
 ----------------------
 * Networking
 * Documents
-* 
+* Core Data
