@@ -1,7 +1,7 @@
-CCCache.loadImage('hearts', 'heart.png');
-CCCache.loadImage('diamonds', 'diamond.png');
-CCCache.loadImage('clubs', 'club.png');
-CCCache.loadImage('spades', 'spade.png');
+CCImage.prepare('hearts', 'heart.png');
+CCImage.prepare('diamonds', 'diamond.png');
+CCImage.prepare('clubs', 'club.png');
+CCImage.prepare('spades', 'spade.png');
 
 function CardGame(canvasName) {
   CCApplication.call(this, canvasName);
@@ -17,14 +17,14 @@ function Table(frame) {
   this.suits = ['hearts','clubs','diamonds','spades'];
   
   var cx = 10;
-  var cy = 10;
+  var cy = 30;
   for(suitIndex in this.suits) {
     for(valueIndex in this.cardValues) {
       this.addSubview(new Card(new CCPoint(cx,cy),this.suits[suitIndex],this.cardValues[valueIndex]));
       cx += 10;
       cy += 10;
     }
-    cy = 10;
+    cy = 30;
   }
 }
 CCSubclass(Table, CCView);
@@ -44,6 +44,11 @@ Table.prototype.drawRect = function(rect) {
   ctx.fill();
   ctx.strokeStyle = "#000000";
   ctx.stroke();
+  
+  ctx.textBaseline = 'top';
+  ctx.font = "10px Arial";
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fillText("Drag cards to move them", 15, 10);
 }
 Table.prototype.doClick = function(e) {
   
@@ -51,7 +56,7 @@ Table.prototype.doClick = function(e) {
 Table.prototype.doMouseDown = function(e) {
   var self = this;
   var localPoint = this.convertPointFromWindow(new CCPoint(e.offsetX, e.offsetY));
-  var card = this.subviewWithPoint(localPoint);
+  var card = this.hitTest(localPoint);
   
   if(card && card.isKindOfClass(Card)) {
     var dragData = {startOrigin:new CCPoint(card.frame.origin.x,card.frame.origin.y), startPosition:localPoint, card:card};

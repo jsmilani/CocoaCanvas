@@ -1,12 +1,15 @@
-CCCache.loadImage('sun', 'Sun.png');
-CCCache.loadImage('planet1', 'Earth.png');
-CCCache.loadImage('planet2', 'Mars.png');
-CCCache.loadImage('planet3', 'Planet3.png');
+CCImage.prepare('sun', 'Sun.png');
+CCImage.prepare('planet1', 'Earth.png');
+CCImage.prepare('planet2', 'Mars.png');
+CCImage.prepare('planet3', 'Planet3.png');
 
 function SpaceGame(canvasName) {
   CCApplication.call(this, canvasName);
   
-  this.window.addSubview(new Galaxy(this.window.frame));
+  this.galaxy = new Galaxy(this.window.frame);
+  this.window.addSubview(this.galaxy);
+  
+  this.window.makeFirstResponder(this.galaxy);
 }
 CCSubclass(SpaceGame, CCApplication);
 
@@ -24,16 +27,33 @@ function Galaxy(frame) {
     this.stars.push(this.randomStar());
   }
   
-  var rect = CCRectMake(0, 0, 480, 480);
-  this.solarSystem = new SolarSystem(rect, 'sun');
-  this.solarSystem.delegate = this;
-  this.addSubview(this.solarSystem);
-  
-  rect = CCRectMake(480, 0, 160, 480);
+  var rect = CCRectMake(480, 0, 160, 480);
   this.infoBar = new InfoBar(rect);
   this.addSubview(this.infoBar);
+  
+  rect = CCRectMake(0, 0, 480, 480);
+  this.solarSystem = new SolarSystem(rect, 'sun');
+  this.solarSystem.infoBar = this.infoBar;
+  this.addSubview(this.solarSystem);
 }
 CCSubclass(Galaxy, CCView);
+Galaxy.prototype.acceptsFirstResponder = function() {return true;}
+Galaxy.prototype.doKeyDown = function(e) {
+  switch(e.keyCode) {
+    case 37:
+      this.solarSystem.rotateClockwise();
+      break;
+    case 38:
+      this.solarSystem.selectPreviousPlanet();
+      break;
+    case 39:
+      this.solarSystem.rotateCounterClockwise();
+      break;
+    case 40:
+      this.solarSystem.selectNextPlanet();
+      break;
+  }
+}
 Galaxy.prototype.randomStar = function() {
   return new Star(Math.floor(Math.random() * (480 - 10) + 4), Math.floor(Math.random() * (480 - 10) + 4) , Math.floor(Math.random() * 2 + 1));
 }
@@ -52,14 +72,14 @@ Galaxy.prototype.drawRect = function(rect) {
     ctx.fillRect(this.stars[i].x, this.stars[i].y, this.stars[i].size, this.stars[i].size);
   }
 }
-Galaxy.prototype.setSelectedPlanet = function(planet) {
-  this.infoBar.setSelectedPlanet(planet);
-}
 
 function SolarSystem(frame, sunName) {
   CCView.call(this, frame);
   this.image = CCImage(sunName);
-  this.delegate = null;
+  this.infoBar = null;
+  
+  this.selectedIndex = null;
+  this.planets = [];
   
   this.addPlanet(100, 12, {name:'Earth', imageName:'planet1', radius:'6,371.0 km', mass:'5.9736x10^24 kg', surfacePressure:'101.325 kPa'});
   this.addPlanet(160, 10, {name:'Mars', imageName:'planet2', radius:'3,396.2 km', mass:'6.4185x10^23 kg', surfacePressure:'0.636 kPa'});
@@ -73,32 +93,67 @@ CCSubclass(SolarSystem, CCView);
 SolarSystem.prototype.addPlanet = function(orbit, speed, data) {
   var planet = new Planet(this.frame.size.w / 2, this.frame.size.h / 2, orbit, speed, data);
   this.addSubview(planet);
-  return planet;
+  this.planets.push(planet);
 }
 SolarSystem.prototype.drawRect = function(rect) {
   var ctx = this.context();
   ctx.drawImage(this.image, (this.frame.size.w - this.image.width) / 2, (this.frame.size.h - this.image.height) / 2);
 }
+SolarSystem.prototype.selectNextPlanet = function() {
+  if(this.selectedIndex || this.selectedIndex == 0) {
+    this.selectedIndex += 1;
+  } else {
+    this.selectedIndex = 0;
+  }
+  if(this.selectedIndex >= this.planets.length) {
+    this.selectedIndex = 0;
+  }
+  this.selectPlanet();
+}
+SolarSystem.prototype.selectPreviousPlanet = function() {
+  if(this.selectedIndex) {
+    this.selectedIndex -= 1;
+  } else {
+    this.selectedIndex = this.planets.length - 1;
+  }
+  this.selectPlanet();
+}
+SolarSystem.prototype.selectPlanet = function() {
+  for(var i in this.planets) {
+    if(i == this.selectedIndex) {
+      this.planets[i].setSelected(true);
+    } else {
+      this.planets[i].setSelected(false);
+    }
+  }
+  
+  this.infoBar.setSelectedPlanet(this.planets[this.selectedIndex]);
+}
+SolarSystem.prototype.rotateClockwise = function() {
+  for(var i in this.planets) {
+    this.planets[i].speed = -Math.abs(this.planets[i].speed);
+  }
+}
+SolarSystem.prototype.rotateCounterClockwise = function() {
+  for(var i in this.planets) {
+    this.planets[i].speed = Math.abs(this.planets[i].speed);
+  }
+}
 SolarSystem.prototype.doClick = function(e) {
   var self = this;
-  var localPoint = this.convertPointFromWindow(new CCPoint(e.offsetX, e.offsetY));
-  var subview = this.subviewWithPoint(localPoint);
+  var localPoint = this.convertPointFromWindow(CCPointFromEvent(e));
+  var subview = this.hitTest(localPoint);
   
-  for(var i in this.subviews) {
-    this.subviews[i].setSelected(false);
-  }
+  this.selectedIndex = null;
   
-  if(subview && subview.isMemberOfClass(Planet)) {
-    subview.setSelected(true);
-    if(this.delegate) {
-      this.delegate.setSelectedPlanet(subview);
-    }
-  } else {
-    if(this.delegate) {
-      this.delegate.setSelectedPlanet(null);
+  for(var i in this.planets) {
+    if(this.planets[i] == subview) {
+      this.selectedIndex = i;
+      this.selectPlanet();
+      return;
     }
   }
-  
+  this.selectPlanet();
 }
 SolarSystem.prototype.updateOrbits = function(e) {
   for(var i in this.subviews) {
@@ -113,6 +168,7 @@ function Planet(x, y, orbit, speed, data) {
   this.origin = new CCPoint(x, y);
   this.orbit = orbit;
   this.speed = speed;
+  
   this.step = Math.floor(Math.random()*360);
   this.frame = CCRectMake(0, 0, this.image.width + 2, this.image.height + 2);
   CCView.call(this, this.frameForStep());
@@ -144,7 +200,7 @@ Planet.prototype.drawRect = function(rect) {
   }
 }
 Planet.prototype.frameForStep = function() {
-  var rect = CCRectMake(Math.round(this.origin.x + this.orbit * Math.sin(this.step / 360) - (this.frame.size.w / 2)), Math.round(this.origin.y + this.orbit * 0.7 * Math.cos(this.step / 360) - (this.frame.size.h / 2)), this.frame.size.w, this.frame.size.h);
+  var rect = CCRectMake(Math.round(this.origin.x + this.orbit * Math.sin(-this.step / 360) - (this.frame.size.w / 2)), Math.round(this.origin.y + this.orbit * 0.7 * Math.cos(-this.step / 360) - (this.frame.size.h / 2)), this.frame.size.w, this.frame.size.h);
   return rect;
 }
 Planet.prototype.stepForward = function() {
@@ -173,10 +229,11 @@ InfoBar.prototype.drawRect = function(rect) {
   var inset = CCRectInset(this.bounds, 1, 1);
   ctx.strokeRect(inset.origin.x, inset.origin.y, inset.size.w, inset.size.h);
   
+  ctx.textBaseline = 'top';
+  ctx.font = "18px Arial";
+  ctx.fillStyle = "#FFFFFF";
+  
   if(this.selectedPlanet) {
-    ctx.textBaseline = 'top';
-    ctx.font = "18px Arial";
-    ctx.fillStyle = "#FFFFFF";
     ctx.fillText(this.selectedPlanet.data.name, 10, 10);
     
     ctx.font = "10px Arial";
@@ -184,14 +241,14 @@ InfoBar.prototype.drawRect = function(rect) {
     ctx.fillText("Radius: "+this.selectedPlanet.data.radius, 10, 55);
     ctx.fillText("Surface Pressure: "+this.selectedPlanet.data.surfacePressure, 10, 70);
   } else {
-    ctx.textBaseline = 'top';
-    ctx.font = "18px Arial";
-    ctx.fillStyle = "#FFFFFF";
     ctx.fillText("Planet Info", 10, 10);
     
     ctx.font = "10px Arial";
-    ctx.fillStyle = "#CCCCCC";
-    ctx.fillText("No planet selected", 40, 50);
-    
+    ctx.fillText("No planet selected", 30, 50);
   }
+  
+  ctx.fillText("Up: Select previous", 10, 200);
+  ctx.fillText("Down: Select next", 10, 215);
+  ctx.fillText("Left: Rotate counter-clockwise", 10, 230);
+  ctx.fillText("Right: Rotate clockwise", 10, 245);
 }

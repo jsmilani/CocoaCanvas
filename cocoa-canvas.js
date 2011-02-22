@@ -18,13 +18,13 @@ CCObject.prototype.isMemberOfClass = function(klass) {
 CCObject.prototype.getClass = function() {
   return this.constructor;
 }
-CCObject.prototype.description = function() {
-  return '<'+this.className()+'>'
-}
 
 function CCPoint(x,y) {
   this.x = x;
   this.y = y;
+}
+function CCPointFromEvent(e) {
+  return new CCPoint(e.offsetX, e.offsetY);
 }
 function CCSize(w,h) {
   this.w = w;
@@ -61,6 +61,24 @@ function CCRectIntersection(rectA,rectB){
   return CCRectMake(notLeftRect.origin.x, notTopRect.origin.y, notRightRect.origin.x + notRightRect.size.w - notLeftRect.origin.x, notBottomRect.origin.y + notBottomRect.size.h - notTopRect.origin.y);
 }
 
+function CCResponder() {
+  this.nextResponder = null;
+}
+CCSubclass(CCResponder, CCObject);
+CCResponder.prototype.acceptsFirstResponder = function() {return false;}
+CCResponder.prototype.becomeFirstResponder = function() {return true;}
+CCResponder.prototype.resignFirstResponder = function() {return true;}
+CCResponder.prototype.setNextResponder = function(responder) {this.nextResponder = responder;}
+CCResponder.prototype.doKeyDown = function(e) {}
+CCResponder.prototype.doKeyUp = function(e) {}
+CCResponder.prototype.doClick = function(e) {}
+CCResponder.prototype.doMouseDown = function(e) {}
+CCResponder.prototype.doMouseUp = function(e) {}
+CCResponder.prototype.doMouseMove = function(e) {}
+CCResponder.prototype.beginDrag = function(doDragCallback,doEndDragCallback, dragData) {}
+
+CCApplication.sharedApplication = null;
+
 function CCApplication(canvasName) {
   CCObject.call(this);
   this.canvas = document.getElementById(canvasName);
@@ -75,6 +93,8 @@ function CCApplication(canvasName) {
   this.endDragCallback = null;
   this.loadingPercentComplete = 0;
   this.invalidRect = this.window.frame;
+  
+  CCApplication.sharedApplication = this;
   
   var self = this;
   
@@ -100,11 +120,11 @@ function CCApplication(canvasName) {
     ctx.restore();
   },200);
   
-  var count = CCCache.imageNames.length;
+  var count = CCImage.cache.imageNames.length;
   var images = [];
-  for(var i in CCCache.imageNames) {
+  for(var i in CCImage.cache.names) {
     var image = new Image();
-    image.src = CCCache.images[CCCache.imageNames[i]];
+    image.src = CCImage.cache.images[CCCache.cache.imageNames[i]];
     images << image;
   }
   
@@ -129,9 +149,10 @@ function CCApplication(canvasName) {
   this.canvas.addEventListener("click", function(e){self.doClick(e);}, true);
   this.canvas.addEventListener("mousedown", function(e){self.doMouseDown(e);}, true);
   this.canvas.addEventListener("mouseup", function(e){self.doMouseUp(e);}, true);
-  this.canvas.addEventListener("mousemove", function(e){self.doMouseMove(e);}, true);
+  document.addEventListener("keydown", function(e){self.doKeyDown(e);}, true);
+  document.addEventListener("keyup", function(e){self.doKeyUp(e);}, true);
 }
-CCSubclass(CCApplication, CCObject);
+CCSubclass(CCApplication, CCResponder);
 CCApplication.prototype.drawWindow = function() {
   if(this.invalidRect) {
     this.ctx.clearRect(this.invalidRect.origin.x, this.invalidRect.origin.y, this.invalidRect.size.w, this.invalidRect.size.h);
@@ -142,16 +163,26 @@ CCApplication.prototype.drawWindow = function() {
 CCApplication.prototype.context = function() {
   return this.ctx;
 }
+CCApplication.prototype.convertEvent = function(e) {
+  if (!e.offsetX && e.offset != 0) {
+    e.offsetX = e.layerX - this.canvas.offsetLeft;
+    e.offsetY = e.layerY - this.canvas.offsetTop;
+  }
+  return e;
+}
 CCApplication.prototype.doClick = function(e) {
+  this.convertEvent(e);
   e.preventDefault();
   e.stopPropagation();
   this.window.doClick(e);
 }
 CCApplication.prototype.doMouseDown = function(e) {
+  this.convertEvent(e);
   e.preventDefault();
   this.window.doMouseDown(e);
 }
 CCApplication.prototype.doMouseUp = function(e) {
+  this.convertEvent(e);
   e.preventDefault();
   if(this.dragging && this.doEndDragCallback) {
     // done dragging
@@ -169,6 +200,7 @@ CCApplication.prototype.doMouseUp = function(e) {
   this.dragData = null;
 }
 CCApplication.prototype.doMouseMove = function(e) {
+  this.convertEvent(e);
   e.preventDefault();
   e.stopPropagation();
   
@@ -178,9 +210,18 @@ CCApplication.prototype.doMouseMove = function(e) {
     this.window.doMouseMove(e);
   }
 }
+CCApplication.prototype.doKeyDown = function(e) {
+  this.window.doKeyDown(e);
+  e.preventDefault();
+}
+CCApplication.prototype.doKeyUp = function(e) {
+  this.window.doKeyUp(e);
+  e.preventDefault();
+}
 CCApplication.prototype.beginDrag = function(doDragCallback, doEndDragCallback, dragData) {
   var self = this;
   // watch global mouse up so we can detect it outside the canvas
+  this.canvas.addEventListener("mousemove", function(e){self.doMouseMove(e);}, true);
   this.canvas.removeEventListener("mouseup", function(e){self.doMouseUp(e);}, true);
   document.addEventListener("mouseup", function(e){self.doMouseUp(e);}, true);
   
@@ -208,7 +249,37 @@ function CCView(frame) {
   this.subviews = [];
   this.superview = null;
 }
-CCSubclass(CCView, CCObject);
+CCSubclass(CCView, CCResponder);
+CCView.prototype.doClick = function(e) {
+  var view = this.hitTest(CCPointFromEvent(e));
+  if(view != null && view != this) {
+    view.doClick(e);
+  }
+}
+CCView.prototype.doMouseDown = function(e) {
+  var view = this.hitTest(CCPointFromEvent(e));
+  if(view && view != this) {
+    view.doMouseDown(e);
+  }
+}
+CCView.prototype.doMouseUp = function(e) {
+  var view = this.hitTest(CCPointFromEvent(e));
+  if(view != null && view != this) {
+    view.doMouseUp(e);
+  }
+}
+CCView.prototype.doMouseMove = function(e) {
+  var view = this.hitTest(CCPointFromEvent(e));
+  if(view != null && view != this) {
+    view.doMouseMove(e);
+  }
+}
+CCView.prototype.beginDrag = function(doDragCallback,doEndDragCallback, dragData) {
+  if(this.superview){
+    this.superview.beginDrag(doDragCallback, doEndDragCallback, dragData);
+  }
+}
+
 CCView.prototype.context = function() {
   if(this.superview) {
     return this.superview.context();
@@ -242,37 +313,7 @@ CCView.prototype.bounds = function() {
 CCView.prototype.drawRect = function(rect) {
   // overload this to do drawing
 }
-CCView.prototype.doClick = function(e) {
-  var view = this.subviewWithPoint(new CCPoint(e.offsetX,e.offsetY));
-  if(view != null && view != this) {
-    view.doClick(e);
-  }
-}
-CCView.prototype.doMouseDown = function(e) {
-  this.lastEvent = e;
-  var view = this.subviewWithPoint(new CCPoint(e.offsetX,e.offsetY));
-  if(view && view != this) {
-    view.doMouseDown(e);
-  }
-}
-CCView.prototype.doMouseUp = function(e) {
-  var view = this.subviewWithPoint(new CCPoint(e.offsetX,e.offsetY));
-  if(view != null && view != this) {
-    view.doMouseUp(e);
-  }
-}
-CCView.prototype.doMouseMove = function(e) {
-  var view = this.subviewWithPoint(new CCPoint(e.offsetX,e.offsetY));
-  if(view != null && view != this) {
-    view.doMouseMove(e);
-  }
-}
-CCView.prototype.beginDrag = function(doDragCallback,doEndDragCallback, dragData) {
-  if(this.superview){
-    this.superview.beginDrag(doDragCallback, doEndDragCallback, dragData);
-  }
-}
-CCView.prototype.subviewWithPoint = function(point) {
+CCView.prototype.hitTest = function(point) {
   for (i in this.subviews) {
     // test in reverse because last item is on top
     var view = this.subviews[this.subviews.length - i - 1];
@@ -357,21 +398,46 @@ CCView.prototype.setNeedsDisplay = function() {
 }
 
 function CCImage(imageName) {
-  var imagePath = CCCache.images[imageName];
+  var imagePath = CCImage.cache.images[imageName];
   var image = new Image();
   image.src = imagePath;
   return image;
 }
+CCImage.cache = {imageNames:[], images:{}}
+CCImage.prepare = function(imageName, imagePath) {
+  CCImage.cache.images[imageName] = imagePath;
+  CCImage.cache.imageNames.push(imageName);
+}
 
 function CCWindow(frame) {
   CCView.call(this, frame);
+  this.firstResponder = null;
 }
 CCSubclass(CCWindow, CCView);
+CCWindow.prototype.makeFirstResponder = function(responder) {
+  if(responder.acceptsFirstResponder() && responder.becomeFirstResponder()) {
+    if(this.firstResponder) {
+      this.firstResponder.resignFirstResponder();
+    }
+    this.firstResponder = responder;
+  } else {
+    this.firstResponder = null;
+  }
+}
+CCWindow.prototype.doKeyDown = function(e) {
+  if(this.firstResponder) {
+    this.firstResponder.doKeyDown(e);
+  }
+  
+}
+CCWindow.prototype.doKeyUp = function(e) {
+  if(this.firstResponder) {
+    this.firstResponder.doKeyUp(e);
+  }
+}
+
 
 function CCViewController(frame) {
   CCObject.call(this, frame);
 }
 CCSubclass(CCViewController, CCObject);
-
-
-CCCache = {imageNames:[], images:{}, loadImage:function(imageName, imagePath) {this.images[imageName] = imagePath; this.imageNames.push(imageName)}}
